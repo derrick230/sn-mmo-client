@@ -59,6 +59,15 @@ func _ready() -> void:
 	tile_pos = world.world_to_tile(global_position)
 	global_position = world.tile_to_world(tile_pos)
 
+	# Mark yourself online and publish initial position to STDB.
+	SpacetimeClient.call_set_online(true)
+	SpacetimeClient.call_set_pos(tile_pos, facing)
+
+
+func _exit_tree() -> void:
+	# Best-effort offline flag
+	SpacetimeClient.call_set_online(false)
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -67,7 +76,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		# Click enemy => select target (and approach if a slot is active)
 		var clicked_enemy: Enemy = world.get_enemy_at(clicked_tile)
 		if clicked_enemy != null:
-			target_enemy_id = clicked_enemy.net_id
+			target_enemy_id = clicked_enemy.get_instance_id()
 
 			# If we already have a move selected, start/continue auto-cast and move into range
 			if active_slot != -1:
@@ -153,6 +162,9 @@ func _do_step(step_dir: Vector2i) -> bool:
 
 	if world.can_step(tile_pos, step_dir):
 		tile_pos += step_dir
+
+		# publish to STDB (one call per successful step)
+		SpacetimeClient.call_set_pos(tile_pos, facing)
 
 		is_moving = true
 		move_t = 0.0
@@ -294,20 +306,16 @@ func _start_auto_cast(slot: int) -> void:
 	active_slot = slot
 	is_auto_casting = true
 
-	# Confirm/acquire target
 	var enemy: Enemy = _get_target_enemy()
 	if enemy == null:
 		var acquired: Enemy = _acquire_target()
 		if acquired == null:
 			is_auto_casting = false
 			return
-		target_enemy_id = acquired.net_id
+		target_enemy_id = acquired.get_instance_id()
 		enemy = acquired
 
-	# Plan movement if needed
 	_ensure_in_range_and_path()
-
-	# Optional: fire immediately if already in range
 	attack_timer = 0.0
 
 
@@ -331,7 +339,6 @@ func _ensure_in_range_and_path() -> void:
 
 
 func _in_range(a: Vector2i, b: Vector2i, r: int) -> bool:
-	# Chebyshev distance for 8-dir range
 	var dx: int = absi(a.x - b.x)
 	var dy: int = absi(a.y - b.y)
 	return max(dx, dy) <= r and not (dx == 0 and dy == 0)
@@ -373,22 +380,18 @@ func _update_auto_cast(delta: float) -> void:
 		_clear_combat()
 		return
 
-	# If walking/smoothing, wait
 	if walk_queue.size() > 0 or is_moving:
 		return
 
 	var move: Move = moves[active_slot]
 
-	# Not in range? path again
 	if not _in_range(tile_pos, enemy.tile_pos, move.range_tiles):
 		_ensure_in_range_and_path()
 		return
 
-	# Face target
 	var dir: Vector2i = enemy.tile_pos - tile_pos
 	facing = Vector2i(sign(dir.x), sign(dir.y))
 
-	# Cooldown timer
 	attack_timer -= delta
 	if attack_timer > 0.0:
 		return
