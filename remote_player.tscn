@@ -1,31 +1,7 @@
-[gd_scene load_steps=5 format=3 uid="uid://cssh7ucul78c3"]
+[gd_scene load_steps=2 format=3 uid="uid://cssh7ucul78c3"]
 
-[ext_resource type="Texture2D" uid="uid://bim4h8fmd2aqp" path="res://Sprite/16x32 Idle-Sheet.png" id="1_my1ri"]
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_vxd6c"]
-atlas = ExtResource("1_my1ri")
-region = Rect2(0, 0, 16, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_mqhvh"]
-atlas = ExtResource("1_my1ri")
-region = Rect2(16, 0, 16, 32)
-
-[sub_resource type="SpriteFrames" id="SpriteFrames_m6c16"]
-animations = [{
-"frames": [{
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_vxd6c")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_mqhvh")
-}],
-"loop": true,
-"name": &"idle_down",
-"speed": 5.0
-}]
+[ext_resource type="PackedScene" uid="uid://dxgwdk04epodl" path="res://Sprite/player_sprite.tscn" id="1_my1ri"]
 
 [node name="RemotePlayer" type="Node2D"]
 
-[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
-sprite_frames = SubResource("SpriteFrames_m6c16")
-animation = &"idle_down"
+[node name="Sprite" parent="." instance=ExtResource("1_my1ri")]

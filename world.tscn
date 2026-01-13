@@ -1,7 +1,8 @@
-[gd_scene load_steps=7 format=4 uid="uid://82vtkikw155s"]
+[gd_scene load_steps=8 format=4 uid="uid://82vtkikw155s"]
 
 [ext_resource type="Texture2D" uid="uid://b8rrd77o3v5u2" path="res://Sprite/free_pixel_16_woods.png" id="1_f3sb7"]
 [ext_resource type="Script" uid="uid://cnk2ns3ftm2bo" path="res://world.gd" id="1_tlwt5"]
+[ext_resource type="PackedScene" uid="uid://cssh7ucul78c3" path="res://remote_player.tscn" id="2_036b0"]
 [ext_resource type="PackedScene" uid="uid://d4fn08br8rhqf" path="res://enemy.tscn" id="2_aqk2v"]
 [ext_resource type="PackedScene" uid="uid://cogt4i6nyp08a" path="res://player.tscn" id="2_fj7yv"]
 
@@ -159,6 +160,7 @@ sources/0 = SubResource("TileSetAtlasSource_fj7yv")
 
 [node name="World" type="Node2D"]
 script = ExtResource("1_tlwt5")
+remote_player_scene = ExtResource("2_036b0")
 enemy_scene = ExtResource("2_aqk2v")
 enemy_spawn_tiles = Array[Vector2i]([Vector2i(6, 0)])
 

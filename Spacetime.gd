@@ -7,11 +7,22 @@ var identity: String = ""
 var token: String = ""
 
 var ws := WebSocketPeer.new()
-var _http := HTTPRequest.new()
+var _http_identity := HTTPRequest.new()
+var _http_reducer := HTTPRequest.new()
+var _http_sql := HTTPRequest.new()
 
 func _ready() -> void:
-	add_child(_http)
+	add_child(_http_identity)
+	add_child(_http_reducer)
+	add_child(_http_sql)
 	connect_ws()
+	# Request identity immediately
+	ensure_identity(func(ok: bool) -> void:
+		if ok:
+			print("[CLIENT] Identity ready: %s" % identity)
+		else:
+			push_error("[CLIENT] Failed to get identity")
+	)
 
 # ---------------- WebSocket subscribe (optional, but nice for later) ----------------
 
@@ -38,9 +49,9 @@ func ensure_identity(cb: Callable) -> void:
 		return
 
 	var url := host_http + "/v1/identity"
-	_http.request_completed.connect(_on_identity_done.bind(cb), CONNECT_ONE_SHOT)
+	_http_identity.request_completed.connect(_on_identity_done.bind(cb), CONNECT_ONE_SHOT)
 
-	var err: int = _http.request(url, [], HTTPClient.METHOD_POST, "")
+	var err: int = _http_identity.request(url, [], HTTPClient.METHOD_POST, "")
 	if err != OK:
 		push_error("Identity request failed: %s" % err)
 		cb.call(false)
@@ -60,11 +71,12 @@ func _on_identity_done(result: int, code: int, headers: PackedStringArray, body:
 	var dict := parsed as Dictionary
 	identity = str(dict.get("identity", ""))
 	token = str(dict.get("token", ""))
+	print("[CLIENT] Got identity: %s" % identity)
 	cb.call(token != "" and identity != "")
 
 # ---------------- Reducers (match your lib.rs) ----------------
 
-func call_set_pos(tile: Vector2i, face: Vector2i) -> void:
+func call_set_pos(tile: Vector2i, face: Vector2i, seq: int) -> void:
 	ensure_identity(func(ok: bool) -> void:
 		if not ok:
 			return
@@ -79,18 +91,21 @@ func call_set_pos(tile: Vector2i, face: Vector2i) -> void:
 			"x": tile.x,
 			"y": tile.y,
 			"facing_x": face.x,
-			"facing_y": face.y
+			"facing_y": face.y,
+			"seq": seq
 		})
 
-		_http.request_completed.connect(_on_set_pos_done, CONNECT_ONE_SHOT)
-		var err: int = _http.request(url, headers, HTTPClient.METHOD_POST, body)
+		_http_reducer.request_completed.connect(_on_set_pos_done, CONNECT_ONE_SHOT)
+		var err: int = _http_reducer.request(url, headers, HTTPClient.METHOD_POST, body)
 		if err != OK:
 			push_error("set_pos request failed: %s" % err)
 	)
 
 func _on_set_pos_done(result: int, code: int, headers: PackedStringArray, body: PackedByteArray) -> void:
 	if code < 200 or code >= 300:
-		push_error("set_pos HTTP %s: %s" % [code, body.get_string_from_utf8()])
+		push_error("[CLIENT] set_pos HTTP %s: %s" % [code, body.get_string_from_utf8()])
+	else:
+		print("[CLIENT] set_pos successfully sent to server (HTTP %d)" % code)
 
 func call_set_online(online: bool) -> void:
 	ensure_identity(func(ok: bool) -> void:
@@ -105,8 +120,8 @@ func call_set_online(online: bool) -> void:
 
 		var body: String = JSON.stringify({ "online": online })
 
-		_http.request_completed.connect(_on_set_online_done, CONNECT_ONE_SHOT)
-		var err: int = _http.request(url, headers, HTTPClient.METHOD_POST, body)
+		_http_reducer.request_completed.connect(_on_set_online_done, CONNECT_ONE_SHOT)
+		var err: int = _http_reducer.request(url, headers, HTTPClient.METHOD_POST, body)
 		if err != OK:
 			push_error("set_online request failed: %s" % err)
 	)
@@ -120,21 +135,21 @@ func _on_set_online_done(result: int, code: int, headers: PackedStringArray, bod
 signal sql_result(query: String, payload: Variant)
 
 func sql(query: String) -> void:
-	ensure_identity(func(ok: bool) -> void:
-		if not ok:
-			return
+	# Don't block polling - if identity isn't ready, skip this poll
+	if token == "" or identity == "":
+		print("[CLIENT] Skipping SQL query - identity not ready yet")
+		return
+	
+	var url: String = "%s/v1/database/%s/sql" % [host_http, db_name]
+	var headers := PackedStringArray([
+		"Content-Type: text/plain",
+		"Authorization: Bearer %s" % token
+	])
 
-		var url: String = "%s/v1/database/%s/sql" % [host_http, db_name]
-		var headers := PackedStringArray([
-			"Content-Type: text/plain",
-			"Authorization: Bearer %s" % token
-		])
-
-		_http.request_completed.connect(_on_sql_done.bind(query), CONNECT_ONE_SHOT)
-		var err: int = _http.request(url, headers, HTTPClient.METHOD_POST, query)
-		if err != OK:
-			push_error("SQL request failed: %s" % err)
-	)
+	_http_sql.request_completed.connect(_on_sql_done.bind(query), CONNECT_ONE_SHOT)
+	var err: int = _http_sql.request(url, headers, HTTPClient.METHOD_POST, query)
+	if err != OK:
+		push_error("SQL request failed: %s" % err)
 
 func _on_sql_done(result: int, code: int, headers: PackedStringArray, body: PackedByteArray, query: String) -> void:
 	if code < 200 or code >= 300:

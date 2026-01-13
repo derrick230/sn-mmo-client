@@ -15,14 +15,16 @@ var tile_pos: Vector2i
 var facing: Vector2i = Vector2i.DOWN
 var walk_target: Vector2i
 
+# Click-to-move queue
+var walk_queue: Array[Vector2i] = []
+# Server move queue
+var move_seq: int = 0
+
 # Smoothing
 var is_moving: bool = false
 var move_t: float = 0.0
 var start_world: Vector2 = Vector2.ZERO
 var target_world: Vector2 = Vector2.ZERO
-
-# Click-to-move queue
-var walk_queue: Array[Vector2i] = []
 
 @onready var world := get_parent()
 
@@ -58,10 +60,10 @@ func _ready() -> void:
 	hp = max_hp
 	tile_pos = world.world_to_tile(global_position)
 	global_position = world.tile_to_world(tile_pos)
-
+	move_seq = 0
 	# Mark yourself online and publish initial position to STDB.
 	SpacetimeClient.call_set_online(true)
-	SpacetimeClient.call_set_pos(tile_pos, facing)
+	SpacetimeClient.call_set_pos(tile_pos, facing, move_seq)
 
 
 func _exit_tree() -> void:
@@ -162,9 +164,14 @@ func _do_step(step_dir: Vector2i) -> bool:
 
 	if world.can_step(tile_pos, step_dir):
 		tile_pos += step_dir
+		move_seq += 1 # increment sequence number
+
+		# Log before sending
+		print("[CLIENT] Sending position to server: tile=(%d, %d), facing=(%d, %d), seq=%d, identity=%s" % 
+			[tile_pos.x, tile_pos.y, facing.x, facing.y, move_seq, SpacetimeClient.identity])
 
 		# publish to STDB (one call per successful step)
-		SpacetimeClient.call_set_pos(tile_pos, facing)
+		SpacetimeClient.call_set_pos(tile_pos, facing, move_seq)
 
 		is_moving = true
 		move_t = 0.0
